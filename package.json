@@ -1,0 +1,32 @@
+{
+  "name": "relay-claiming-cli",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": "./src/index.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "scripts": {
+    "clean": "rm -rf node_modules",
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@inquirer/core": "^8.2.2",
+    "@inquirer/prompts": "^5.0.5",
+    "@safe-global/protocol-kit": "^6.0.3",
+    "@walletconnect/sign-client": "^2.20.0",
+    "axios": "^1.7.2",
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "log-symbols": "^6.0.0",
+    "ora": "^8.0.1",
+    "viem": "^2.17.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.4",
+    "tsx": "^4.15.6",
+    "typescript": "^5.4.4"
+  }
+}
