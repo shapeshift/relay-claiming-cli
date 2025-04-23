@@ -12,16 +12,11 @@
     "start": "tsx src/index.ts"
   },
   "dependencies": {
-    "@inquirer/core": "^8.2.2",
     "@inquirer/prompts": "^5.0.5",
-    "@safe-global/protocol-kit": "^6.0.3",
     "@walletconnect/sign-client": "^2.20.0",
     "axios": "^1.7.2",
-    "chalk": "^5.3.0",
     "commander": "^12.1.0",
     "dotenv": "^16.4.5",
-    "log-symbols": "^6.0.0",
-    "ora": "^8.0.1",
     "viem": "^2.17.3"
   },
   "devDependencies": {

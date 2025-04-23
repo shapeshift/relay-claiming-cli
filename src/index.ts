@@ -2,11 +2,11 @@ import 'dotenv/config'
 import * as prompts from '@inquirer/prompts'
 import { Command } from 'commander'
 import { error, log, warn } from 'node:console'
-import { SignClient } from "@walletconnect/sign-client";
+import Client, { SignClient } from "@walletconnect/sign-client";
 import type { SessionTypes } from "@walletconnect/types";
 import { baseChainId, baseRelayChainId, relayBaseUrl } from './constants';
 import axios from 'axios';
-import { ClaimApiResponse, ClaimRequestBody, RelayBalance, RelayBalanceResponse } from './types';
+import { ClaimApiResponse, RelayBalanceResponse } from './types';
 
 const program = new Command()
 
@@ -19,7 +19,7 @@ const shutdown = () => {
   process.exit(0)
 }
 
-const chooseTokenClaim = async (address: string): Promise<string | undefined> => {
+const getBalanceToClaim = async (address: string): Promise<string | undefined> => {
   try {
     const apiUrl = `${relayBaseUrl}/app-fees/${address}/balances`;
     log(`Fetching balances from: ${apiUrl}`);
@@ -52,12 +52,128 @@ const chooseTokenClaim = async (address: string): Promise<string | undefined> =>
   }
 }
 
+const connectWallet = async (signClient: Client): Promise<SessionTypes.Struct> => {
+  const { uri, approval } = await signClient.connect({
+    requiredNamespaces: {
+      eip155: {
+        methods: ["personal_sign"],
+        chains: [baseChainId],
+        events: ["accountsChanged", "chainChanged"],
+      },
+    },
+  });
+
+  if (uri) {
+    log('--- ACTION REQUIRED ---');
+    log('Please connect to your wallet using the following URI:');
+    log(uri);
+    log('-----------------------');
+  }
+
+  log('Waiting for wallet connection approval...');
+  const session = await approval();
+  log(`Wallet connected! Session established for topic: ${session.topic}`);
+  
+  return session;
+}
+
+const getRecipientAddress = (session: SessionTypes.Struct): string => {
+  const accounts = session.namespaces.eip155?.accounts;
+  if (!accounts || accounts.length === 0) {
+    throw new Error("No EIP155 accounts found in session.");
+  }
+  const recipient = accounts[0].split(':')[2];
+  log(`Using recipient address: ${recipient}`);
+  
+  return recipient;
+}
+
+const requestClaimMessage = async (recipient: string, currencyAddress: string): Promise<ClaimApiResponse> => {
+  const claimApiUrl = `${relayBaseUrl}/app-fees/${recipient}/claim`;
+  log(`Sending claim request to: ${claimApiUrl}`);
+
+  const response = await axios.post<ClaimApiResponse>(claimApiUrl, {
+    chainId: baseRelayChainId,
+    currency: currencyAddress,
+    recipient: recipient,
+  }, {
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  log('Claim API Response received:');
+  log(JSON.stringify(response.data, null, 2));
+  
+  return response.data;
+}
+
+const handleSignature = async (
+  signClient: Client, 
+  session: SessionTypes.Struct, 
+  claimResponse: ClaimApiResponse, 
+  recipient: string
+): Promise<string | undefined> => {
+  const firstStep = claimResponse.steps?.[0];
+  const firstItem = firstStep?.items?.[0];
+
+  if (firstStep?.kind !== 'signature' || 
+      firstItem?.status !== 'incomplete' || 
+      !firstItem.data?.sign?.message) {
+    warn('Could not find a signature request in the first step of the response.');
+    log('Full steps data:', JSON.stringify(claimResponse.steps, null, 2));
+    return undefined;
+  }
+
+  const messageToSign = firstItem.data.sign.message;
+  log('--- ACTION REQUIRED ---');
+  log(`Please sign the following message using your connected wallet:`);
+  log(messageToSign);
+  log('-----------------------');
+
+  const signature = await signClient.request({
+    chainId: baseChainId,
+    topic: session.topic,
+    request: {
+      method: 'personal_sign',
+      params: [messageToSign, recipient],
+    }
+  });
+
+  log('Signature received:', signature);
+  return signature as string;
+}
+
+const executePermit = async (signature: string, requestId: string): Promise<void> => {
+  const executePermitsUrl = `${relayBaseUrl}/execute/permits?signature=${signature}`;
+  const executePermitsBody = {
+    kind: "claim",
+    requestId: requestId,
+  };
+
+  log(`Executing permit with URL: ${executePermitsUrl}`);
+  log(`Request Body: ${JSON.stringify(executePermitsBody, null, 2)}`);
+
+  try {
+    const executeResponse = await axios.post(executePermitsUrl, executePermitsBody, {
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    log('Execute permits response received:');
+    log(JSON.stringify(executeResponse.data, null, 2));
+  } catch (executeError) {
+    error('Error executing permits:', executeError instanceof Error ? executeError.message : executeError);
+    if (axios.isAxiosError(executeError)) {
+      error('Response status:', executeError.response?.status);
+      error('Response data:', executeError.response?.data);
+    }
+    throw executeError;
+  }
+}
+
 const claim = async () => {
   let session: SessionTypes.Struct | undefined = undefined;
 
   const signClient = await SignClient.init({
     projectId: process.env.WALLETCONNECT_PROJECT_ID,
-    relayUrl: process.env.WALLETCONNECT_RELAY_URL,
     metadata: {
       name: "Relay Claiming CLI",
       description: "Relay Claiming CLI",
@@ -69,120 +185,30 @@ const claim = async () => {
   signClient.on("session_delete", shutdown)
 
   try {
-    const { uri, approval } = await signClient.connect({
-      requiredNamespaces: {
-        eip155: {
-          methods: [
-            "eth_sendTransaction",
-            "eth_sign",
-            "personal_sign",
-            "eth_signTypedData",
-            "eth_signTypedData_v4",
-          ],
-          chains: [baseChainId],
-          events: ["accountsChanged", "chainChanged"],
-        },
-      },
-    });
-
-    if (uri) {
-      log('Please connect to your wallet using the following URI:');
-      log(uri);
-    }
-
-    log('Waiting for wallet connection approval...');
-    session = await approval();
-    log(`Wallet connected! Session established for topic: ${session.topic}`);
-
-    const accounts = session.namespaces.eip155?.accounts;
-    if (!accounts || accounts.length === 0) {
-      throw new Error("No EIP155 accounts found in session.");
-    }
-    const recipient = accounts[0].split(':')[2];
-    log(`Using recipient address: ${recipient}`);
-
-    const currencyAddress = await chooseTokenClaim(recipient);
+    session = await connectWallet(signClient);
+    
+    const recipient = getRecipientAddress(session);
+    const currencyAddress = await getBalanceToClaim(recipient);
 
     if (!currencyAddress) {
       throw new Error("No currency selected or available. Exiting.");
     }
 
-    const claimApiUrl = `${relayBaseUrl}/app-fees/${recipient}/claim`;
-    const requestBody: ClaimRequestBody = {
-      chainId: baseRelayChainId,
-      currency: currencyAddress,
-      recipient: recipient,
-    };
-
-    log(`Sending claim request to: ${claimApiUrl}`);
-
-    const claimResponse = await axios.post<ClaimApiResponse>(claimApiUrl, requestBody, {
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-    log('Claim API Response received:');
-    log(JSON.stringify(claimResponse.data, null, 2));
-
-    const firstStep = claimResponse.data.steps?.[0];
-    const firstItem = firstStep?.items?.[0];
-
-    if (firstStep?.kind === 'signature' && firstItem?.status === 'incomplete' && firstItem.data?.sign?.message) {
-      const messageToSign = firstItem.data.sign.message;
-      log('--- ACTION REQUIRED ---');
-      log(`Please sign the following message using your connected wallet:`);
-      log(messageToSign);
-      log('-----------------------');
-
-      const signature = await signClient.request({
-        chainId: baseChainId,
-        topic: session.topic,
-        request: {
-          method: 'personal_sign',
-          params: [messageToSign, recipient],
-        }
-      })
-
-      log('Signature received:', signature);
-
-      const requestId = firstItem.data.sign.message;
-
+    const claimResponse = await requestClaimMessage(recipient, currencyAddress);
+    
+    const signature = await handleSignature(signClient, session, claimResponse, recipient);
+    
+    if (signature) {
+      const firstStep = claimResponse.steps?.[0];
+      const firstItem = firstStep?.items?.[0];
+      const requestId = firstItem?.data?.sign?.message;
+      
       if (!requestId) {
         throw new Error("Could not find requestId in the claim response.");
       }
-
-      const executePermitsUrl = `${relayBaseUrl}/execute/permits?signature=${signature}`;
-      const executePermitsBody = {
-        kind: "claim",
-        requestId: requestId,
-      };
-
-      log(`Executing permit with URL: ${executePermitsUrl}`);
-      log(`Request Body: ${JSON.stringify(executePermitsBody, null, 2)}`);
-
-      try {
-        const executeResponse = await axios.post(executePermitsUrl, executePermitsBody, {
-          headers: { 'Content-Type': 'application/json' },
-        });
-
-        log('Execute permits response received:');
-        log(JSON.stringify(executeResponse.data, null, 2));
-        // TODO: Handle further steps if needed based on executeResponse.data
-
-      } catch (executeError) {
-        error('Error executing permits:', executeError instanceof Error ? executeError.message : executeError);
-        if (axios.isAxiosError(executeError)) {
-          error('Response status:', executeError.response?.status);
-          error('Response data:', executeError.response?.data);
-        }
-        // Decide if we should re-throw or exit here
-        throw executeError; // Re-throw to be caught by the outer catch block
-      }
-
-    } else {
-      warn('Could not find a signature request in the first step of the response.');
-      log('Full steps data:', JSON.stringify(claimResponse.data.steps, null, 2));
+      
+      await executePermit(signature, requestId);
     }
-
   } catch (err) {
     error('Error during claim process:', err instanceof Error ? err.message : err)
     if (axios.isAxiosError(err)) {
@@ -190,7 +216,7 @@ const claim = async () => {
       error('Response data:', err.response?.data);
     }
   } finally {
-    if (session) {
+    if (session && signClient) {
       await signClient.disconnect({
         topic: session.topic,
         reason: {
@@ -204,8 +230,6 @@ const claim = async () => {
 
 const main = async () => {
   await claim();
-
-  log("Claim process initiated. Waiting for further actions or shutdown signal.");
   process.exit(0);
 }
 

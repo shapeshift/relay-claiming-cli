@@ -23,12 +23,6 @@ export type RelayBalance = {
   minimumAmount: string;
 };
 
-export type ClaimRequestBody = {
-  chainId: number;
-  currency: string;
-  recipient: string;
-};
-
 export type SignData = {
   signatureKind: 'eip191' | 'eip712';
   message: string;
