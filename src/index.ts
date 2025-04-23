@@ -197,6 +197,10 @@ const claim = async () => {
     const claimResponse = await requestClaimMessage(recipient, currencyAddress);
     
     const signature = await handleSignature(signClient, session, claimResponse, recipient);
+
+    if (claimResponse.steps.length > 1) {
+      throw new Error("Multiple steps found in the claim response. Exiting as we don't support this yet. Please contact the engineering workstream.");
+    }
     
     if (signature) {
       const firstStep = claimResponse.steps?.[0];
