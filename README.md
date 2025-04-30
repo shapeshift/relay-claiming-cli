@@ -21,6 +21,14 @@
 
 ## Running
 
+- Use node 23:
+  ```bash
+  nvm use 23
+  ```
+- Install dependencies:
+  ```bash
+  yarn
+  ```
 - Run script:
   ```bash
   yarn start

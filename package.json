@@ -4,7 +4,7 @@
   "type": "module",
   "exports": "./src/index.js",
   "engines": {
-    "node": ">=18"
+    "node": ">=23"
   },
   "license": "MIT",
   "scripts": {
@@ -23,5 +23,6 @@
     "@types/node": "^20.12.4",
     "tsx": "^4.15.6",
     "typescript": "^5.4.4"
-  }
+  },
+  "packageManager": "yarn@3.5.0"
 }

@@ -1,5 +1,6 @@
 
 export const relayBaseUrl = 'https://api.relay.link'
 
-export const baseRelayChainId = 8453
-export const baseChainId = 'eip155:8453'
+// base
+export const eth_chainId = 8453
+export const baseCaip2 = 'eip155:8453'

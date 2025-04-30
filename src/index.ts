@@ -4,7 +4,7 @@ import { Command } from 'commander'
 import { error, log, warn } from 'node:console'
 import Client, { SignClient } from "@walletconnect/sign-client";
 import type { SessionTypes } from "@walletconnect/types";
-import { baseChainId, baseRelayChainId, relayBaseUrl } from './constants';
+import { eth_chainId, baseCaip2, relayBaseUrl } from './constants';
 import axios from 'axios';
 import { ClaimApiResponse, RelayBalanceResponse } from './types';
 
@@ -57,7 +57,7 @@ const connectWallet = async (signClient: Client): Promise<SessionTypes.Struct> =
     requiredNamespaces: {
       eip155: {
         methods: ["personal_sign"],
-        chains: [baseChainId],
+        chains: [baseCaip2],
         events: ["accountsChanged", "chainChanged"],
       },
     },
@@ -93,7 +93,7 @@ const requestClaimMessage = async (recipient: string, currencyAddress: string): 
   log(`Sending claim request to: ${claimApiUrl}`);
 
   const response = await axios.post<ClaimApiResponse>(claimApiUrl, {
-    chainId: baseRelayChainId,
+    chainId: eth_chainId,
     currency: currencyAddress,
     recipient: recipient,
   }, {
@@ -130,7 +130,7 @@ const handleSignature = async (
   log('-----------------------');
 
   const signature = await signClient.request({
-    chainId: baseChainId,
+    chainId: baseCaip2,
     topic: session.topic,
     request: {
       method: 'personal_sign',
