@@ -897,14 +897,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"axios@npm:^1.7.2":
-  version: 1.7.2
-  resolution: "axios@npm:1.7.2"
+"axios@npm:^1.8.2":
+  version: 1.9.0
+  resolution: "axios@npm:1.9.0"
   dependencies:
-    follow-redirects: "npm:^1.15.6"
-    form-data: "npm:^4.0.0"
-    proxy-from-env: "npm:^1.1.0"
-  checksum: e457e2b0ab748504621f6fa6609074ac08c824bf0881592209dfa15098ece7e88495300e02cd22ba50b3468fd712fe687e629dcb03d6a3f6a51989727405aedf
+    follow-redirects: ^1.15.6
+    form-data: ^4.0.0
+    proxy-from-env: ^1.1.0
+  checksum: 631f02c9c279f2ae90637a4989cc9d75c1c27aefd16b6e8eb90f98a4d0bddaccfd1cb1387be12101d1ab0f9bbf0c47e2451b4de0cf2870462a7d9ed3de8da3f2
   languageName: node
   linkType: hard
 
@@ -2041,7 +2041,7 @@ __metadata:
     "@inquirer/prompts": ^5.0.5
     "@types/node": ^20.12.4
     "@walletconnect/sign-client": ^2.20.0
-    axios: ^1.7.2
+    axios: ^1.8.2
     commander: ^12.1.0
     dotenv: ^16.4.5
     tsx: ^4.15.6
